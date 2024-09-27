@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Volume Control</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body{
+        
+            text-align: center;
+            background-image: url("istockphoto-1503757804-2048x2048.jpg");
+            background-repeat: no-repeat;
+            background-position: cover;
+            background-size: cover;
+
+        }
+        #volumeGraph {
+            width: 100%;
+            height: 400px;
+            display: none;
+          
+        }
+        .container{
+            margin-top: 100px;
+        }
+        .file{
+            margin-bottom: 20px;
+        }
+        
+    </style>
+</head>
+<body>
+    <h1>TESTING AND RESULT</h1>
+    <div class="container"></div>
+    <input type="file" id="audioFile" accept="audio/*" class="file"/>
+    <br/>
+    
+    <label for="volume">Volume (dB):</label>
+    <input type="range" id="volume" min="10" max="80" value="40" />
+    <button id="playButton">Play</button>
+    <button id="resultButton">Show Results</button>
+    <audio id="audioPlayer" controls style="display: none;"></audio>
+
+    <canvas id="volumeGraph"></canvas>
+    <div id="feedback" style="margin-top: 20px; font-weight: bold;"></div>
+</div>
+    <script>
+        const audioFileInput = document.getElementById('audioFile');
+        const volumeInput = document.getElementById('volume');
+        const playButton = document.getElementById('playButton');
+        const resultButton = document.getElementById('resultButton');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const ctx = document.getElementById('volumeGraph').getContext('2d');
+        const feedbackDiv = document.getElementById('feedback');
+
+        let audioContext;
+        let source;
+        let gainNode;
+        let volumeData = [];
+        let timeData = [];
+        let chart;
+
+        audioFileInput.addEventListener('change', handleFileSelect);
+        volumeInput.addEventListener('input', updateVolume);
+        playButton.addEventListener('click', playAudio);
+        resultButton.addEventListener('click', showResults);
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const fileURL = URL.createObjectURL(file);
+                audioPlayer.src = fileURL;
+                audioPlayer.load();
+
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
+                gainNode = audioContext.createGain();
+                gainNode.gain.value = dbToGain(volumeInput.value);
+                gainNode.connect(audioContext.destination);
+
+                source = audioContext.createBufferSource();
+                fetch(fileURL)
+                    .then(response => response.arrayBuffer())
+                    .then(data => audioContext.decodeAudioData(data))
+                    .then(buffer => {
+                        source.buffer = buffer;
+                        source.connect(gainNode);
+                    });
+            }
+        }
+
+        function updateVolume() {
+            if (gainNode) {
+                gainNode.gain.value = dbToGain(volumeInput.value);
+            }
+        }
+
+        function playAudio() {
+            if (source) {
+                source.start(0);
+                startVolumeMonitoring();
+                provideFeedback();
+            }
+        }
+
+        function dbToGain(db) {
+            return Math.pow(10, db / 20);
+        }
+
+        function startVolumeMonitoring() {
+            const interval = setInterval(() => {
+                if (source && audioContext.state === 'running') {
+                    const currentTime = audioContext.currentTime;
+                    volumeData.push(gainNode.gain.value);
+                    timeData.push(currentTime);
+                } else {
+                    clearInterval(interval);
+                }
+            }, 100);
+        }
+
+        function showResults() {
+            document.getElementById('volumeGraph').style.display = 'block';
+            if (chart) {
+                chart.destroy();
+            }
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: timeData,
+                    datasets: [{
+                        label: 'Volume Level (Gain)',
+                        data: volumeData,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: 'Time (s)' } },
+                        y: { title: { display: true, text: 'Gain' }, min: 0, max: 1 }
+                    }
+                }
+            });
+            provideFeedback();
+        }
+
+        function provideFeedback() {
+            const volumeLevel = parseInt(volumeInput.value);
+            let feedbackMessage = '';
+
+            if (volumeLevel >= 0 && volumeLevel <= 20) {
+                alert('No issues');
+            } else if (volumeLevel >= 30 && volumeLevel <= 40) {
+                alert('Mild hearing ');
+            } else if (volumeLevel >= 50 && volumeLevel <= 70) {
+                alert('Moderate hearing: Potential risk.');
+            } else if (volumeLevel >= 80) {
+                alert('Severe of hearing damage!');
+            }
+
+            feedbackDiv.innerText = feedbackMessage;
+        }
+    </script>
+</body>
+</html>
